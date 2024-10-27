@@ -79,6 +79,29 @@ vim /usr/local/etc/v2ray/config.json
 1. 其中`******`为一个随机的字符串, 如果自己选择难受可以用[这个网站生成](https://www.random.org/strings/?num=1&len=7&digits=on&upperalpha=on&loweralpha=on&unique=off&format=html&rnd=new)
 2. 其中`######`为随机生成的uuid, 可以用[这个网站生成](https://1024tools.com/uuid)
 
+6. 修改v2ray服务配置文件:
+```bash
+vim /etc/systemd/system/v2ray@.service
+```
+修改成如下配置
+```text
+[Unit]
+Description=V2Ray Service
+Documentation=https://www.v2fly.org/
+After=network.target nss-lookup.target
+
+[Service]
+User=nobody
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ExecStart=/usr/local/bin/v2ray run -config /usr/local/etc/v2ray/%i.json
+Restart=on-failure
+RestartPreventExitStatus=23
+
+[Install]
+WantedBy=multi-user.target
+```
 ### 安装和配置nginx
 1. 安装nginx
 ```bash
@@ -86,7 +109,7 @@ sudo apt update
 sudo apt install nginx
 nginx -v
 ```
-2. 配置nginx
+1. 配置nginx
 ```bash
 vim /etc/nginx/nginx.conf
 ```
@@ -170,15 +193,44 @@ server {
 2. `*****` 这里换成和v2ray完全相同的字符串
 
 ### 配置SSL证书
-我这边使用python
+为了用真正的https流量翻墙, 我们的网站必须有合法的SSL证书。我用自动化工具Certbot申请证书, 只要把以下命令复制到命令窗口, 依次执行即可。
+这里说的证书，申请完全是免费的，申请时需要邮箱地址(可以用匿名邮箱)。
+
+1. 我这边使用python安装certbot, 当然你也可以使用官方推荐的snap去安装certbot
 ```bash
 apt install python3.10
 pip3 install certbot
 ```
+2. 如果你的系统安装了防火墙, 请关闭它, 防止申请证书时报错, 如果没有防火墙且想要安装我之后会说
+```bash
+systemctl stop firewalld && systemctl disable firewalld
+```
+3. 申请SSL证书 这一步做个填空题，把这条命令里的域名和邮箱，换成你自己的信息。
+```text
+certbot certonly --standalone --agree-tos -n -d www.&&&&&& -d &&&&&& -m *******
+```
+    1. `&&&&&`不带www.的域名
+    2. `*****`换成邮箱地址
+4. 考虑到证书只有3个月时效, 证书的自动化更新下面会讲
 ### 启动服务
+1. 依次执行以下步骤启动 v2ray + nginx
+```bash
+systemctl 
+```
+2. 使用任务调度自动更新证书, 添加下述内容
+```bash
+0 0 1 */2 * service nginx stop; certbot renew; service nginx start;
+```
+### ufw使用(服务器未添加防火墙)
 
-### ufw使用
+## 配置v2ray客户端
 
 ## 其他细节
-1. 关于配置CDN隐藏IP : 在cloudflare域名管理界面点一下灰色的云，让颜色变成橙色即可。
-2. iOS客户端使用全部要收费，常用有Shadowrocket（小火箭）等, 配置方法不做展开 。
+1. 关于配置CDN隐藏IP : 在cloudflare域名管理界面点一下灰色的云, 让颜色变成橙色即可。
+2. iOS客户端使用全部要收费, 常用有Shadowrocket (小火箭) 等, 配置方法不做展开 。
+3. 如果过程出现报错可以看看是否设置selinux为宽松模式:
+```bash
+sudo setenforce 0
+sestatus
+```
+4. 关于443端口伪装逃避检查:
