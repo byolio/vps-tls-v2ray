@@ -1,4 +1,4 @@
-# 如何搭建v2ray服务器及其使用方法(主笔正在奋笔疾书中...)
+# 如何搭建v2ray服务器及其使用方法
 ## 前言
 本文是搭建V2Ray服务器（ws+tls）的教程。除了搭建V2Ray+ws+tls的过程，还包括打开BBR加速，以及简单的防止检测。
 随着GFW封杀力度的不断加大, 很多纯VMess都被封杀掉了。如果你打算自己搭建翻墙服务，强烈推荐V2Ray+ws+tls（CDN, BBR可选）一步到位。
@@ -211,21 +211,73 @@ certbot certonly --standalone --agree-tos -n -d www.&&&&&& -d &&&&&& -m *******
 ```
     1. `&&&&&`不带www.的域名
     2. `*****`换成邮箱地址
-4. 考虑到证书只有3个月时效, 证书的自动化更新下面会讲
+4. 考虑到该证书只有3个月时效, 证书的自动化更新下面会讲
 ### 启动服务
 1. 依次执行以下步骤启动 v2ray + nginx
 ```bash
-systemctl 
+sudo systemctl daemon-reload
+sudo systemctl enable v2ray
+sudo systemctl start v2ray
+sudo systemctl enable nginx
+sudo systemctl start nginx
 ```
-2. 使用任务调度自动更新证书, 添加下述内容
+2. 检查 v2ray + nginx 服务是否处于active(running)状态
+```bash
+sudo systemctl status v2ray
+sudo systemctl status nginx
+```
+(如果发现运行状态为failed: 请使用`sudo journalctl -u v2ray.service -xe` 查看日志找出错误并修改错误)
+3. 使用任务调度自动更新证书, 添加下述内容
 ```bash
 0 0 1 */2 * service nginx stop; certbot renew; service nginx start;
 ```
+此时服务配置完毕
 ### ufw使用(服务器未添加防火墙)
-
+ufw和firewalld都是用于管理Linux系统防火墙的工具, 相比于firewalld的配置复杂ufw
+体积小、资源占用低，配置简单, 特别适合VPS等环境。
+1. 安装ufw
+```bash
+sudo apt update
+sudo apt install ufw -y
+```
+2. 启动ufw
+```bash
+sudo ufw enable
+```
+3. 查看ufw状态
+```bash
+sudo ufw status
+```
+4. 开放ufw端口
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
+5. 查看端口是否开放
+```bash
+sudo ufw status
+```
+配置防火墙完成
 ## 配置v2ray客户端
-
-## 其他细节
+配置完服务端之后, 需要在windows上配置对应的[v2rayN客户端](https://github.com/2dust/v2rayN)
+下好后配置步骤如下:
+1. 点击服务器->添加vmess服务器
+2. 编辑服务器:
+   * 别名随便取一个
+   * 地址填写你的vps公网ip
+   * 端口填写443
+   * 用户id需要与之前填写的uuid一致
+   * 额外id填写0
+   * 加密方式是: auto就行
+   * 传输协议选ws
+   * 伪装类型选none
+   * 伪装域名写你买的域名: 要求有www.
+   * path写之前的随机字符串前面添加/
+   * 传输层安全选择tls
+   * 内核要使用v2fly
+3. 保存后开启Tun使用即可
+## 其他细节(可选)
 1. 关于配置CDN隐藏IP : 在cloudflare域名管理界面点一下灰色的云, 让颜色变成橙色即可。
 2. iOS客户端使用全部要收费, 常用有Shadowrocket (小火箭) 等, 配置方法不做展开 。
 3. 如果过程出现报错可以看看是否设置selinux为宽松模式:
@@ -233,4 +285,25 @@ systemctl
 sudo setenforce 0
 sestatus
 ```
-4. 关于443端口伪装逃避检查:
+1. 关于443端口伪装逃避检查:
+在nginx的root目录下通过xftp等工具将index.html换掉成你写的网页即可, 选正常一点的网页界面的可以有效防止被检测到。
+
+1. 关于BBR加速:
+BBR是谷歌开发的拥塞控制算法，可以降低延迟，加快访问速度。 \
+如果linux内核版本大于4.10就可以用BBR了，把以下三条命令复制到命令窗口执行：
+```bash
+bash -c 'echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf'
+bash -c 'echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf'
+sysctl -p
+```
+然后运行以下命令，查看BBR是否启动成功：
+```bash
+sysctl net.ipv4.tcp_congestion_control
+```
+如果显示
+```bash
+net.ipv4.tcp_congestion_control = bbr
+```
+就表示成功启动了BBR加速。
+## 总结
+以上是v2ray服务器建立的全部过程, 不同环境下可能会稍有不同, 多试几遍总能成功, 祝你建出属于自己的v2ray服务器吧。
